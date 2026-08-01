@@ -1,0 +1,78 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: forwardai-crm-db
+    plan: starter
+    ipAllowList: []
+    databaseName: forwardai_crm
+    user: forwardai_crm_user
+    region: oregon
+
+  # Express Backend API
+  - type: web
+    name: forwardai-crm-api
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install && pnpm run build --filter=server
+    startCommand: cd apps/server && pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forwardai-crm-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: NEXTAUTH_URL
+        value: https://forwardai-crm.onrender.com
+    healthCheckPath: /api/health
+    region: oregon
+    headers:
+      - http:
+          paths:
+            - path: /api/*
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+              headers:
+                - key: Access-Control-Allow-Origin
+                  value: https://forwardai-crm-web.onrender.com
+                - key: Access-Control-Allow-Methods
+                  value: GET, POST, PUT, PATCH, DELETE, OPTIONS
+                - key: Access-Control-Allow-Headers
+                  value: Content-Type, Authorization
+    connect: false
+
+  # Next.js Frontend
+  - type: web
+    name: forwardai-crm-web
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install && pnpm run build --filter=web
+    startCommand: cd apps/web && pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://forwardai-crm-api.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://forwardai-crm-web.onrender.com
+    healthCheckPath: /
+    region: oregon
+    headers:
+      - http:
+          paths:
+            - path: /*
+              methods:
+                - GET
+                - HEAD
+                - OPTIONS
+              headers:
+                - key: Cache-Control
+                  value: public, max-age=3600, s-maxage=3600
