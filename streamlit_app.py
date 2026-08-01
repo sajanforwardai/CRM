@@ -1,17 +1,18 @@
 import streamlit as st
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import os
+import sqlite3
 from datetime import datetime
-import json
+import os
 
 # Page config
 st.set_page_config(page_title="ForwardAI CRM", layout="wide")
 
-# Database connection
-@st.cache_resource
+# Database setup
+DB_PATH = "/tmp/forwardai_crm.db"
+
 def get_db_connection():
-    return psycopg2.connect(os.getenv("DATABASE_URL"))
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
     """Initialize database tables"""
@@ -21,43 +22,44 @@ def init_db():
     # Users table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password_hash VARCHAR(255) NOT NULL,
-            display_name VARCHAR(255),
-            role VARCHAR(50) DEFAULT 'user',
-            created_at TIMESTAMP DEFAULT NOW()
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name TEXT,
+            role TEXT DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
     # Clients table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS clients (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            industry VARCHAR(100),
-            contact_email VARCHAR(255),
-            contact_phone VARCHAR(20),
-            annual_value FLOAT,
-            status VARCHAR(50) DEFAULT 'prospect',
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            industry TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            annual_value REAL DEFAULT 0,
+            status TEXT DEFAULT 'prospect',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
     # Projects table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS projects (
-            id SERIAL PRIMARY KEY,
-            client_id INTEGER REFERENCES clients(id),
-            title VARCHAR(255) NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER,
+            title TEXT NOT NULL,
             description TEXT,
-            status VARCHAR(50) DEFAULT 'proposal',
+            status TEXT DEFAULT 'proposal',
             start_date DATE,
             end_date DATE,
-            estimated_hours INTEGER,
+            estimated_hours INTEGER DEFAULT 0,
             actual_hours INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES clients(id)
         )
     """)
 
@@ -71,7 +73,7 @@ except Exception as e:
     st.error(f"Database error: {e}")
 
 # Sidebar navigation
-st.sidebar.title("ForwardAI CRM")
+st.sidebar.title("🚀 ForwardAI CRM")
 page = st.sidebar.radio("Navigate", ["Dashboard", "Clients", "Projects", "Settings"])
 
 if page == "Dashboard":
@@ -113,7 +115,7 @@ elif page == "Clients":
     with tab1:
         try:
             conn = get_db_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur = conn.cursor()
 
             cur.execute("SELECT * FROM clients ORDER BY created_at DESC")
             clients = cur.fetchall()
@@ -143,21 +145,24 @@ elif page == "Clients":
             status = st.selectbox("Status", ["prospect", "active", "closed"])
 
             if st.form_submit_button("Add Client"):
-                try:
-                    conn = get_db_connection()
-                    cur = conn.cursor()
+                if not name:
+                    st.error("Company name is required")
+                else:
+                    try:
+                        conn = get_db_connection()
+                        cur = conn.cursor()
 
-                    cur.execute("""
-                        INSERT INTO clients (name, industry, contact_email, contact_phone, annual_value, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (name, industry, email, phone, annual_value, status))
+                        cur.execute("""
+                            INSERT INTO clients (name, industry, contact_email, contact_phone, annual_value, status)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (name, industry, email, phone, annual_value, status))
 
-                    conn.commit()
-                    cur.close()
-                    st.success(f"✅ {name} added!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error adding client: {e}")
+                        conn.commit()
+                        cur.close()
+                        st.success(f"✅ {name} added!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error adding client: {e}")
 
 elif page == "Projects":
     st.title("🚀 Projects")
@@ -167,7 +172,7 @@ elif page == "Projects":
     with tab1:
         try:
             conn = get_db_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur = conn.cursor()
 
             cur.execute("""
                 SELECT p.*, c.name as client_name
@@ -195,38 +200,45 @@ elif page == "Projects":
     with tab2:
         try:
             conn = get_db_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur = conn.cursor()
             cur.execute("SELECT id, name FROM clients")
             clients = {c['id']: c['name'] for c in cur.fetchall()}
             cur.close()
 
-            with st.form("add_project"):
-                title = st.text_input("Project Title")
-                client_id = st.selectbox("Client", options=list(clients.keys()), format_func=lambda x: clients[x])
-                description = st.text_area("Description")
-                status = st.selectbox("Status", ["proposal", "active", "completed"])
-                estimated_hours = st.number_input("Estimated Hours", min_value=0, step=10)
+            if not clients:
+                st.warning("No clients yet. Add one in the Clients tab first.")
+            else:
+                with st.form("add_project"):
+                    title = st.text_input("Project Title")
+                    client_id = st.selectbox("Client", options=list(clients.keys()), format_func=lambda x: clients[x])
+                    description = st.text_area("Description")
+                    status = st.selectbox("Status", ["proposal", "active", "completed"])
+                    estimated_hours = st.number_input("Estimated Hours", min_value=0, step=10)
 
-                if st.form_submit_button("Add Project"):
-                    try:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
+                    if st.form_submit_button("Add Project"):
+                        if not title:
+                            st.error("Project title is required")
+                        else:
+                            try:
+                                conn = get_db_connection()
+                                cur = conn.cursor()
 
-                        cur.execute("""
-                            INSERT INTO projects (client_id, title, description, status, estimated_hours)
-                            VALUES (%s, %s, %s, %s, %s)
-                        """, (client_id, title, description, status, estimated_hours))
+                                cur.execute("""
+                                    INSERT INTO projects (client_id, title, description, status, estimated_hours)
+                                    VALUES (?, ?, ?, ?, ?)
+                                """, (client_id, title, description, status, estimated_hours))
 
-                        conn.commit()
-                        cur.close()
-                        st.success(f"✅ {title} added!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error adding project: {e}")
+                                conn.commit()
+                                cur.close()
+                                st.success(f"✅ {title} added!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error adding project: {e}")
         except Exception as e:
             st.error(f"Error loading clients: {e}")
 
 elif page == "Settings":
     st.title("⚙️ Settings")
-    st.write("Database Status: ✅ Connected")
-    st.write(f"Database URL: {os.getenv('DATABASE_URL', 'Not set')[:50]}...")
+    st.write("✅ Database: SQLite")
+    st.write(f"📍 Database Path: {DB_PATH}")
+    st.write("Ready to deploy and iterate!")
