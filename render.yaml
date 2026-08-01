@@ -1,32 +1,12 @@
 services:
-  # Express Backend API
+  # Streamlit CRM App
   - type: web
-    name: forwardai-crm-api
-    runtime: node
+    name: forwardai-crm
+    runtime: python-3
     plan: starter
     region: oregon
-    buildCommand: cd apps/server && pnpm install && pnpm run build
-    startCommand: cd apps/server && node dist/index.js
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run streamlit_app.py
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: "4000"
       - key: DATABASE_URL
         sync: false
-      - key: JWT_SECRET
-        sync: false
-
-  # Next.js Frontend
-  - type: web
-    name: forwardai-crm-web
-    runtime: node
-    plan: starter
-    region: oregon
-    buildCommand: cd apps/web && pnpm install && pnpm run build
-    startCommand: cd apps/web && pnpm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        value: https://forwardai-crm-api.onrender.com
