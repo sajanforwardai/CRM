@@ -4,7 +4,6 @@ services:
     name: forwardai-crm-db
     plan: starter
     region: oregon
-    ipAllowList: []
 
   # Express Backend API
   - type: web
