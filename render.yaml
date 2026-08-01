@@ -3,16 +3,15 @@ services:
   - type: pserv
     name: forwardai-crm-db
     plan: starter
-    ipAllowList: []
-    databaseName: forwardai_crm
-    user: forwardai_crm_user
     region: oregon
+    ipAllowList: []
 
   # Express Backend API
   - type: web
     name: forwardai-crm-api
     runtime: node
     plan: starter
+    region: oregon
     buildCommand: cd apps/server && pnpm install && pnpm run build
     startCommand: cd apps/server && node dist/index.js
     envVars:
@@ -26,32 +25,13 @@ services:
           property: connectionString
       - key: JWT_SECRET
         sync: false
-    healthCheckPath: /api/health
-    region: oregon
-    headers:
-      - http:
-          paths:
-            - path: /api/*
-              methods:
-                - GET
-                - POST
-                - PUT
-                - PATCH
-                - DELETE
-              headers:
-                - key: Access-Control-Allow-Origin
-                  value: https://forwardai-crm-web.onrender.com
-                - key: Access-Control-Allow-Methods
-                  value: GET, POST, PUT, PATCH, DELETE, OPTIONS
-                - key: Access-Control-Allow-Headers
-                  value: Content-Type, Authorization
-    connect: false
 
   # Next.js Frontend
   - type: web
     name: forwardai-crm-web
     runtime: node
     plan: starter
+    region: oregon
     buildCommand: cd apps/web && pnpm install && pnpm run build
     startCommand: cd apps/web && pnpm start
     envVars:
@@ -59,16 +39,3 @@ services:
         value: production
       - key: NEXT_PUBLIC_API_URL
         value: https://forwardai-crm-api.onrender.com
-    healthCheckPath: /
-    region: oregon
-    headers:
-      - http:
-          paths:
-            - path: /*
-              methods:
-                - GET
-                - HEAD
-                - OPTIONS
-              headers:
-                - key: Cache-Control
-                  value: public, max-age=3600, s-maxage=3600
